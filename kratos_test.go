@@ -237,6 +237,7 @@ func TestCheckPingTimeout(t *testing.T) {
 			timesCalled++
 			return nil
 		},
+		stop:   make(chan bool),
 		Logger: logging.New(nil),
 	}
 

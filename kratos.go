@@ -22,7 +22,7 @@ const (
 	writeWait = time.Duration(10) * time.Second
 
 	// Time allowed to wait in between pings
-	pingWait = time.Duration(60) * time.Second
+	pingWait = time.Duration(300) * time.Second
 
 	StatusDeviceDisconnected int = 523
 	StatusDeviceTimeout      int = 524
@@ -66,6 +66,11 @@ func (f *ClientFactory) New() (Client, error) {
 	// with the knowledge that `:` will be found in the string twice
 	connectionURL = connectionURL[len("ws://"):strings.LastIndex(connectionURL, ":")]
 
+	myPingMissHandler := pingMissHandler{
+		handlePingMiss: f.HandlePingMiss,
+		stop:           make(chan bool),
+	}
+
 	newClient := &client{
 		deviceID:        inHeader.deviceName,
 		userAgent:       "WebPA-1.6(" + inHeader.firmwareName + ";" + inHeader.modelName + "/" + inHeader.manufacturer + ";)",
@@ -74,10 +79,7 @@ func (f *ClientFactory) New() (Client, error) {
 		handlers:        f.Handlers,
 		connection:      newConnection,
 		headerInfo:      inHeader,
-	}
-
-	myPingMissHandler := pingMissHandler{
-		handlePingMiss: f.HandlePingMiss,
+		pingHandler: 	 myPingMissHandler,
 	}
 
 	if f.ClientLogger != nil {
@@ -110,6 +112,11 @@ type HandlePingMiss func() error
 type pingMissHandler struct {
 	handlePingMiss HandlePingMiss
 	log.Logger
+	stop chan bool
+}
+
+func (pmh *pingMissHandler) stopPingHandler() {
+	pmh.stop <- true
 }
 
 func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string, inClient Client) {
@@ -118,9 +125,11 @@ func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string,
 
 	for !pingMiss {
 		select {
-		case <-inTimer.C:
-			logging.Info(pmh).Log(logging.MessageKey(), "Ping miss, calling handler and closing client!")
+		case <-pmh.stop:
+			logging.Info(pmh).Log(logging.MessageKey(), "Stopping ping handler!")
 			pingMiss = true
+		case <-inTimer.C:
+			logging.Info(pmh).Log(logging.MessageKey(), "Ping miss, calling handler!")
 			err := pmh.handlePingMiss()
 			if err != nil {
 				logging.Info(pmh).Log(logging.MessageKey(), "Error handling ping miss:", logging.ErrorKey(), err)
@@ -169,6 +178,7 @@ type client struct {
 	handlers        []HandlerRegistry
 	connection      websocketConnection
 	headerInfo      *clientHeader
+	pingHandler    	pingMissHandler
 	log.Logger
 }
 
@@ -199,7 +209,7 @@ func (c *client) Send(message interface{}) (err error) {
 // will close the connection to the server
 func (c *client) Close() (err error) {
 	logging.Info(c).Log("Closing client...")
-
+	c.pingHandler.stopPingHandler()
 	err = c.connection.Close()
 	return
 }
