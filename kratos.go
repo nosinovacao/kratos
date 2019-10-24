@@ -263,11 +263,7 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 	headers.Add("X-Webpa-Model-Name", headerInfo.modelName)
 	headers.Add("X-Webpa-Manufacturer", headerInfo.manufacturer)
 
-	//make sure destUrl's protocol is websocket (ws)
-	wsURL = strings.Replace(httpURL, "http", "ws", 1)
-
-	// creates a new client connection given the URL string
-	if strings.Contains(httpURL, "https") {
+	if strings.Contains(httpURL, "https") && crtFile != "" && keyFile != "" {
 		cert, err := tls.LoadX509KeyPair(crtFile, keyFile)
 		if err != nil {
 			return nil, "", fmt.Errorf("Couldn't load ca-certificate!")
@@ -275,6 +271,12 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 
 		websocket.DefaultDialer.TLSClientConfig = &tls.Config {Certificates: []tls.Certificate{cert}}
 	}
+
+	//make sure destUrl's protocol is websocket (ws)
+	wsURL = strings.Replace(httpURL, "http", "ws", 1)
+
+	// creates a new client connection given the URL string
+
 
 	connection, resp, err := websocket.DefaultDialer.Dial(wsURL, headers)
 
