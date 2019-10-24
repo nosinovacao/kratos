@@ -2,6 +2,7 @@ package kratos
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -35,6 +36,8 @@ type ClientFactory struct {
 	ModelName      string
 	Manufacturer   string
 	DestinationURL string
+	CRT			   string
+	Key			   string
 	Handlers       []HandlerRegistry
 	HandlePingMiss HandlePingMiss
 	ClientLogger   log.Logger
@@ -49,7 +52,7 @@ func (f *ClientFactory) New() (Client, error) {
 		manufacturer: f.Manufacturer,
 	}
 
-	newConnection, connectionURL, err := createConnection(inHeader, f.DestinationURL)
+	newConnection, connectionURL, err := createConnection(inHeader, f.DestinationURL, f.CRT, f.Key)
 
 	if err != nil {
 		return nil, err
@@ -245,7 +248,7 @@ func (c *client) read() (err error) {
 }
 
 // private func used to generate the client that we're looking to produce
-func createConnection(headerInfo *clientHeader, httpURL string) (connection *websocket.Conn, wsURL string, err error) {
+func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, keyFile string) (connection *websocket.Conn, wsURL string, err error) {
 	_, err = device.ParseID(headerInfo.deviceName)
 
 	if err != nil {
@@ -264,12 +267,20 @@ func createConnection(headerInfo *clientHeader, httpURL string) (connection *web
 	wsURL = strings.Replace(httpURL, "http", "ws", 1)
 
 	// creates a new client connection given the URL string
+	if strings.Contains(httpURL, "https") {
+		cert, err := tls.LoadX509KeyPair(crtFile, keyFile)
+		if err != nil {
+			return nil, "", fmt.Errorf("Couldn't load ca-certificate!")
+		}
+
+		websocket.DefaultDialer.TLSClientConfig = &tls.Config {Certificates: []tls.Certificate{cert}}
+	}
+
 	connection, resp, err := websocket.DefaultDialer.Dial(wsURL, headers)
 
 	if err == websocket.ErrBadHandshake && resp.StatusCode == http.StatusTemporaryRedirect {
 		//Get url to which we are redirected and reconfigure it
 		wsURL = strings.Replace(resp.Header.Get("Location"), "http", "ws", 1)
-
 		connection, resp, err = websocket.DefaultDialer.Dial(wsURL, headers)
 	}
 
