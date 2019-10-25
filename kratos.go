@@ -67,7 +67,7 @@ func (f *ClientFactory) New() (Client, error) {
 
 	// at this point we know that the URL connection is legitimate, so we can do some string manipulation
 	// with the knowledge that `:` will be found in the string twice
-	connectionURL = connectionURL[len("ws://"):strings.LastIndex(connectionURL, ":")]
+	//connectionURL = connectionURL[len("ws://"):strings.LastIndex(connectionURL, ":")]
 
 	myPingMissHandler := pingMissHandler{
 		handlePingMiss: f.HandlePingMiss,
