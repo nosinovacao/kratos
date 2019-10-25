@@ -298,7 +298,7 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 		connection, resp, err = websocket.DefaultDialer.Dial(wsURL, headers)
 	} else {
 		if resp != nil {
-			err = createError(resp, fmt.Errorf("Received ", resp.StatusCode, " from petasos!"))
+			err = createError(resp, fmt.Errorf("Received invalid response from petasos!"))
 		}
 		return nil, "", err
 	}
