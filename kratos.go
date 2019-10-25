@@ -292,7 +292,7 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 		return nil, "", err
 	}
 
-	wsURL = strings.Replace(resp.Header.Get("Location"), "http", "ws", 1)
+	wsURL = strings.Replace(resp.Header.Get("Location"), "http", "ws", 1) + "/api/v2/device"
 
 	if resp.StatusCode == http.StatusTemporaryRedirect {
 		//Get url to which we are redirected and reconfigure it
