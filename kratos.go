@@ -213,8 +213,8 @@ func (c *client) Send(message interface{}) (err error) {
 // will close the connection to the server
 func (c *client) Close() (err error) {
 	logging.Info(c).Log("Closing client...")
-	c.pingHandler.stopPingHandler()
 	err = c.connection.Close()
+	c.pingHandler.stopPingHandler()
 	return
 }
 
