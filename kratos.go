@@ -124,7 +124,6 @@ func (pmh *pingMissHandler) stopPingHandler() {
 
 func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string, inClient Client) {
 	defer inClient.Close()
-	defer close(pmh.stop)
 	pingMiss := false
 
 	for !pingMiss {
