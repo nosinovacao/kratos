@@ -263,24 +263,39 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 	headers.Add("X-Webpa-Model-Name", headerInfo.modelName)
 	headers.Add("X-Webpa-Manufacturer", headerInfo.manufacturer)
 
+	var client http.Client
+
 	if crtFile != "" && keyFile != "" {
 		cert, err := tls.LoadX509KeyPair(crtFile, keyFile)
 		if err != nil {
-			return nil, "", fmt.Errorf("Couldn't load ca-certificate!")
+			return nil, "", err
 		}
 
-		websocket.DefaultDialer.TLSClientConfig = &tls.Config {Certificates: []tls.Certificate{cert}}
+		tlsConfig := &tls.Config {Certificates: []tls.Certificate{cert}}
+
+		transport := http.Transport{
+			TLSClientConfig: tlsConfig,
+		}
+
+		websocket.DefaultDialer.TLSClientConfig = tlsConfig
+
+		client = http.Client{
+			Transport: &transport,
+		}
 	}
 
-	//make sure destUrl's protocol is websocket (ws)
-	wsURL = strings.Replace(httpURL, "http", "ws", 1)
+	req, err := http.NewRequest("GET", httpURL, nil)
+	req.Header.Set("X-Webpa-Device-Name", headerInfo.deviceName)
+	resp, err := client.Do(req)
 
-	// creates a new client connection given the URL string
-	connection, resp, err := websocket.DefaultDialer.Dial(wsURL, headers)
+	if err != nil {
+		return nil, "", err
+	}
 
-	if err == websocket.ErrBadHandshake && resp.StatusCode == http.StatusTemporaryRedirect {
+	wsURL = strings.Replace(resp.Header.Get("Location"), "http", "ws", 1)
+
+	if resp.StatusCode == http.StatusTemporaryRedirect {
 		//Get url to which we are redirected and reconfigure it
-		wsURL = strings.Replace(resp.Header.Get("Location"), "http", "ws", 1)
 		connection, resp, err = websocket.DefaultDialer.Dial(wsURL, headers)
 	}
 
