@@ -292,16 +292,13 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 		return nil, "", err
 	}
 
-	wsURL = strings.Replace(resp.Header.Get("Location"), "http", "ws", 1) + "/api/v2/device"
-
 	if resp.StatusCode == http.StatusTemporaryRedirect {
+		wsURL = strings.Replace(resp.Header.Get("Location"), "http", "ws", 1) + "/api/v2/device"
 		//Get url to which we are redirected and reconfigure it
 		connection, resp, err = websocket.DefaultDialer.Dial(wsURL, headers)
-	}
-
-	if err != nil {
+	} else {
 		if resp != nil {
-			err = createError(resp, err)
+			err = createError(resp, fmt.Errorf("Received ", resp.StatusCode, " from petasos!"))
 		}
 		return nil, "", err
 	}
