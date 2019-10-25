@@ -292,8 +292,16 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 		return nil, "", err
 	}
 
-	if resp.StatusCode == http.StatusTemporaryRedirect {
-		wsURL = strings.Replace(resp.Header.Get("Location"), "http", "ws", 1) + "/api/v2/device"
+	if resp.StatusCode == http.StatusTemporaryRedirect || resp.Request.Response.StatusCode == http.StatusTemporaryRedirect {
+		var location string
+
+		if location =  resp.Header.Get("Location"); location != "" {
+			wsURL = strings.Replace(location, "http", "ws", 1) + "/api/v2/device"
+		} else {
+			location = resp.Request.Response.Header.Get("Location")
+			wsURL = strings.Replace(location, "http", "ws", 1) + "/api/v2/device"
+		}
+
 		//Get url to which we are redirected and reconfigure it
 		connection, resp, err = websocket.DefaultDialer.Dial(wsURL, headers)
 	} else {
