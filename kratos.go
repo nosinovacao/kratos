@@ -103,7 +103,7 @@ func (f *ClientFactory) New() (Client, error) {
 
 	pingTimer := time.NewTimer(pingWait)
 
-	go myPingMissHandler.checkPing(pingTimer, pinged, newClient)
+	go myPingMissHandler.checkPing(pingTimer, pinged)
 	go newClient.read()
 
 	return newClient, nil
@@ -123,8 +123,7 @@ func (pmh *pingMissHandler) stopPingHandler() {
 	pmh.stop <- true
 }
 
-func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string, inClient Client) {
-	defer inClient.Close()
+func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string) {
 	pingMiss := false
 
 	for !pingMiss {
