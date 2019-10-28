@@ -287,10 +287,13 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 	req, err := http.NewRequest("GET", httpURL, nil)
 	req.Header.Set("X-Webpa-Device-Name", headerInfo.deviceName)
 	resp, err := client.Do(req)
-
+	req.Close = true
+	
 	if err != nil {
 		return nil, "", err
 	}
+	
+	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusTemporaryRedirect || resp.Request.Response.StatusCode == http.StatusTemporaryRedirect {
 		var location string
