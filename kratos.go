@@ -66,6 +66,11 @@ func (f *ClientFactory) New() (Client, error) {
 		return err
 	})
 
+	newConnection.SetPongHandler(func(appData string) error {
+		err := newConnection.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(pingWait))
+		return err
+	})
+
 	// at this point we know that the URL connection is legitimate, so we can do some string manipulation
 	// with the knowledge that `:` will be found in the string twice
 	//connectionURL = connectionURL[len("ws://"):strings.LastIndex(connectionURL, ":")]
@@ -103,7 +108,7 @@ func (f *ClientFactory) New() (Client, error) {
 
 	pingTimer := time.NewTimer(pingWait)
 
-	go myPingMissHandler.checkPing(pingTimer, pinged)
+	go myPingMissHandler.checkPing(pingTimer, pinged, newClient)
 	go newClient.read()
 
 	return newClient, nil
@@ -123,7 +128,7 @@ func (pmh *pingMissHandler) stopPingHandler() {
 	pmh.stop <- true
 }
 
-func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string) {
+func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string, inClient *client) {
 	pingMiss := false
 
 	for !pingMiss {
@@ -132,11 +137,14 @@ func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string)
 			logging.Info(pmh).Log(logging.MessageKey(), "Stopping ping handler!")
 			pingMiss = true
 		case <-inTimer.C:
-			logging.Info(pmh).Log(logging.MessageKey(), "Ping miss, calling handler!")
+			if err := inClient.connection.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+				return
+			}
+			/*logging.Info(pmh).Log(logging.MessageKey(), "Ping miss, calling handler!")
 			err := pmh.handlePingMiss()
 			if err != nil {
 				logging.Info(pmh).Log(logging.MessageKey(), "Error handling ping miss:", logging.ErrorKey(), err)
-			}
+			}*/
 		case <-pinged:
 			if !inTimer.Stop() {
 				<-inTimer.C
