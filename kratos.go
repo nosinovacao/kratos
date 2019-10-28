@@ -65,12 +65,7 @@ func (f *ClientFactory) New() (Client, error) {
 		err := newConnection.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(writeWait))
 		return err
 	})
-
-	newConnection.SetPongHandler(func(appData string) error {
-		err := newConnection.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(pingWait))
-		return err
-	})
-
+	
 	// at this point we know that the URL connection is legitimate, so we can do some string manipulation
 	// with the knowledge that `:` will be found in the string twice
 	//connectionURL = connectionURL[len("ws://"):strings.LastIndex(connectionURL, ":")]
@@ -138,7 +133,7 @@ func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string,
 			pingMiss = true
 		case <-inTimer.C:
 			if err := inClient.connection.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-				return
+				logging.Error(pmh).Log(logging.MessageKey(), "Ping miss!")
 			}
 			/*logging.Info(pmh).Log(logging.MessageKey(), "Ping miss, calling handler!")
 			err := pmh.handlePingMiss()
@@ -288,7 +283,6 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 			}).DialContext,
 			TLSHandshakeTimeout: 10 * time.Second,
 			TLSClientConfig: tlsConfig,
-
 		}
 
 		dialer = websocket.Dialer{
