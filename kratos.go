@@ -137,6 +137,7 @@ func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string,
 			if err != nil {
 				logging.Info(pmh).Log(logging.MessageKey(), "Error handling ping miss:", logging.ErrorKey(), err)
 			}
+			inTimer.Reset(pingWait)
 		case <-pinged:
 			if !inTimer.Stop() {
 				<-inTimer.C
