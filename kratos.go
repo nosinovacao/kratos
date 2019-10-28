@@ -132,6 +132,7 @@ func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string,
 			logging.Info(pmh).Log(logging.MessageKey(), "Stopping ping handler!")
 			pingMiss = true
 		case <-inTimer.C:
+			logging.Info(pmh).Log(logging.MessageKey(), "Resending Ping message!")
 			if err := inClient.connection.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				logging.Error(pmh).Log(logging.MessageKey(), "Ping miss!")
 			}
