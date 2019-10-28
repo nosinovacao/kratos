@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -264,6 +265,7 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 	headers.Add("X-Webpa-Manufacturer", headerInfo.manufacturer)
 
 	var client http.Client
+	var dialer websocket.Dialer
 
 	if crtFile != "" && keyFile != "" {
 		cert, err := tls.LoadX509KeyPair(crtFile, keyFile)
@@ -274,10 +276,20 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 		tlsConfig := &tls.Config {Certificates: []tls.Certificate{cert}}
 
 		transport := http.Transport{
+			DialContext:(&net.Dialer{
+				Timeout: 30 * time.Second,
+				KeepAlive: 300 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout: 10 * time.Second,
 			TLSClientConfig: tlsConfig,
 		}
 
-		websocket.DefaultDialer.TLSClientConfig = tlsConfig
+		dialer = websocket.Dialer{
+			TLSClientConfig:   tlsConfig,
+			HandshakeTimeout:  5 * time.Second,
+			ReadBufferSize:    65535,
+			WriteBufferSize:   65535,
+		}
 
 		client = http.Client{
 			Transport: &transport,
@@ -306,7 +318,7 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 		}
 
 		//Get url to which we are redirected and reconfigure it
-		connection, resp, err = websocket.DefaultDialer.Dial(wsURL, headers)
+		connection, resp, err = dialer.Dial(wsURL, headers)
 	} else {
 		if resp != nil {
 			err = createError(resp, fmt.Errorf("Received invalid response from petasos!"))
