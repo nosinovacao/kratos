@@ -21,10 +21,16 @@ import (
 
 const (
 	// Time allowed to write a message to the peer.
-	writeWait = time.Duration(10) * time.Second
+	writeWait = 10 * time.Second
 
-	// Time allowed to wait in between pings
-	pingWait = time.Duration(300) * time.Second
+	// Time allowed to read the next pong message from the peer.
+	pongWait = 300 * time.Second
+
+	// Send pings to peer with this period. Must be less than pongWait.
+	pingPeriod = (pongWait * 9) / 10
+
+	// Maximum message size allowed from peer.
+	maxMessageSize = 2048
 
 	StatusDeviceDisconnected int = 523
 	StatusDeviceTimeout      int = 524
@@ -37,8 +43,8 @@ type ClientFactory struct {
 	ModelName      string
 	Manufacturer   string
 	DestinationURL string
-	CRT			   string
-	Key			   string
+	CRT            string
+	Key            string
 	Handlers       []HandlerRegistry
 	HandlePingMiss HandlePingMiss
 	ClientLogger   log.Logger
@@ -59,18 +65,15 @@ func (f *ClientFactory) New() (Client, error) {
 		return nil, err
 	}
 
-	pinged := make(chan string)
-	newConnection.SetPingHandler(func(appData string) error {
-		pinged <- appData
-		err := newConnection.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(writeWait))
-		return err
-	})
+	newConnection.SetReadLimit(maxMessageSize)
+	newConnection.SetReadDeadline(time.Now().Add(pongWait))
+	newConnection.SetPongHandler(func(string) error { _ = newConnection.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 
 	// at this point we know that the URL connection is legitimate, so we can do some string manipulation
 	// with the knowledge that `:` will be found in the string twice
 	//connectionURL = connectionURL[len("ws://"):strings.LastIndex(connectionURL, ":")]
-
 	myPingMissHandler := pingMissHandler{
+		conn:           newConnection,
 		handlePingMiss: f.HandlePingMiss,
 		stop:           make(chan bool),
 	}
@@ -83,7 +86,7 @@ func (f *ClientFactory) New() (Client, error) {
 		handlers:        f.Handlers,
 		connection:      newConnection,
 		headerInfo:      inHeader,
-		pingHandler: 	 myPingMissHandler,
+		pingHandler:     myPingMissHandler,
 	}
 
 	if f.ClientLogger != nil {
@@ -101,9 +104,9 @@ func (f *ClientFactory) New() (Client, error) {
 		}
 	}
 
-	pingTimer := time.NewTimer(pingWait)
+	pingTimer := time.NewTimer(pingPeriod)
 
-	go myPingMissHandler.checkPing(pingTimer, pinged, newClient)
+	go myPingMissHandler.checkPing(pingTimer, newClient)
 	go newClient.read()
 
 	return newClient, nil
@@ -114,6 +117,7 @@ func (f *ClientFactory) New() (Client, error) {
 type HandlePingMiss func() error
 
 type pingMissHandler struct {
+	conn           *websocket.Conn
 	handlePingMiss HandlePingMiss
 	log.Logger
 	stop chan bool
@@ -123,7 +127,7 @@ func (pmh *pingMissHandler) stopPingHandler() {
 	pmh.stop <- true
 }
 
-func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string, inClient *client) {
+func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, inClient *client) {
 	pingMiss := false
 
 	for !pingMiss {
@@ -132,7 +136,7 @@ func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string,
 			logging.Info(pmh).Log(logging.MessageKey(), "Stopping ping handler!")
 			pingMiss = true
 		case <-inTimer.C:
-			logging.Info(pmh).Log(logging.MessageKey(), "Resending Ping message!")
+			pmh.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := inClient.connection.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				logging.Error(pmh).Log(logging.MessageKey(), "Ping miss!")
 			}
@@ -142,13 +146,8 @@ func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, pinged <-chan string,
 				pingMiss = true
 			default:
 				logging.Info(pmh).Log(logging.MessageKey(), "Resetting timer!")
-				inTimer.Reset(pingWait)
+				inTimer.Reset(pingPeriod)
 			}
-		case <-pinged:
-			if !inTimer.Stop() {
-				<-inTimer.C
-			}
-			inTimer.Reset(pingWait)
 		}
 	}
 }
@@ -188,7 +187,7 @@ type client struct {
 	handlers        []HandlerRegistry
 	connection      websocketConnection
 	headerInfo      *clientHeader
-	pingHandler    	pingMissHandler
+	pingHandler     pingMissHandler
 	log.Logger
 }
 
@@ -278,22 +277,22 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 			return nil, "", err
 		}
 
-		tlsConfig := &tls.Config {Certificates: []tls.Certificate{cert}}
+		tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
 
 		transport := http.Transport{
-			DialContext:(&net.Dialer{
-				Timeout: 30 * time.Second,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
 				KeepAlive: 300 * time.Second,
 			}).DialContext,
 			TLSHandshakeTimeout: 10 * time.Second,
-			TLSClientConfig: tlsConfig,
+			TLSClientConfig:     tlsConfig,
 		}
 
 		dialer = websocket.Dialer{
-			TLSClientConfig:   tlsConfig,
-			HandshakeTimeout:  5 * time.Second,
-			ReadBufferSize:    65535,
-			WriteBufferSize:   65535,
+			TLSClientConfig:  tlsConfig,
+			HandshakeTimeout: 5 * time.Second,
+			ReadBufferSize:   65535,
+			WriteBufferSize:  65535,
 		}
 
 		client = http.Client{
@@ -305,17 +304,17 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 	req.Header.Set("X-Webpa-Device-Name", headerInfo.deviceName)
 	resp, err := client.Do(req)
 	req.Close = true
-	
+
 	if err != nil {
 		return nil, "", err
 	}
-	
+
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusTemporaryRedirect || resp.Request.Response.StatusCode == http.StatusTemporaryRedirect {
 		var location string
 
-		if location =  resp.Header.Get("Location"); location != "" {
+		if location = resp.Header.Get("Location"); location != "" {
 			wsURL = strings.Replace(location, "http", "ws", 1) + "/api/v2/device"
 		} else {
 			location = resp.Request.Response.Header.Get("Location")
