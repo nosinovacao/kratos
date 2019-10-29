@@ -284,7 +284,7 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 
 		dialer = websocket.Dialer{
 			TLSClientConfig:  tlsConfig,
-			HandshakeTimeout: 5 * time.Second,
+			HandshakeTimeout: 10 * time.Second,
 			ReadBufferSize:   65535,
 			WriteBufferSize:  65535,
 		}
