@@ -127,25 +127,22 @@ func (pmh *pingHandler) stopPingHandler() {
 
 func (pmh *pingHandler) checkPing(inClient *client) {
 	pingTimer := time.NewTimer(pingPeriod)
-	pingMiss := false
+	defer func() {
+		pingTimer.Stop()
+		pmh.conn.Close()
+		close(pmh.stop)
+	}()
 
-	defer pingTimer.Stop()
-
-	for !pingMiss {
+	for  {
 		select {
 		case <-pmh.stop:
 			logging.Info(pmh).Log(logging.MessageKey(), "Stopping ping handler!")
-			pingMiss = true
+			pmh.conn.WriteMessage(websocket.CloseMessage, []byte{})
+			return
 		case <-pingTimer.C:
 			pmh.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := inClient.connection.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-				logging.Error(pmh).Log(logging.MessageKey(), "Ping miss!")
-			}
-			select {
-			case <-pmh.stop:
-				logging.Info(pmh).Log(logging.MessageKey(), "Stopping ping handler!")
-				pingMiss = true
-			default:
+				return
 			}
 		}
 	}
@@ -217,7 +214,6 @@ func (c *client) Send(message interface{}) (err error) {
 // will close the connection to the server
 func (c *client) Close() (err error) {
 	logging.Info(c).Log("Closing client...")
-	err = c.connection.Close()
 	c.pingHandler.stopPingHandler()
 	return
 }
@@ -225,6 +221,7 @@ func (c *client) Close() (err error) {
 // going to be used to access the HandleMessage() function
 func (c *client) read() (err error) {
 	logging.Info(c).Log("Reading message...")
+	defer c.connection.Close()
 
 	for {
 		var serverMessage []byte
@@ -247,8 +244,6 @@ func (c *client) read() (err error) {
 			}
 		}
 	}
-
-	return
 }
 
 // private func used to generate the client that we're looking to produce
