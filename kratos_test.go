@@ -232,7 +232,7 @@ func TestCheckPingTimeout(t *testing.T) {
 	fakeClient := &mockClient{}
 	fakeClient.On("Close").Return(nil).Once()
 
-	testPingMissHandler := pingMissHandler{
+	testPingMissHandler := pingHandler{
 		handlePingMiss: func() error {
 			timesCalled++
 			return nil

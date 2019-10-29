@@ -66,13 +66,13 @@ func (f *ClientFactory) New() (Client, error) {
 	}
 
 	newConnection.SetReadLimit(maxMessageSize)
-	newConnection.SetReadDeadline(time.Now().Add(pongWait))
+	_ = newConnection.SetReadDeadline(time.Now().Add(pongWait))
 	newConnection.SetPongHandler(func(string) error { _ = newConnection.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 
 	// at this point we know that the URL connection is legitimate, so we can do some string manipulation
 	// with the knowledge that `:` will be found in the string twice
 	//connectionURL = connectionURL[len("ws://"):strings.LastIndex(connectionURL, ":")]
-	myPingMissHandler := pingMissHandler{
+	myPingMissHandler := pingHandler{
 		conn:           newConnection,
 		handlePingMiss: f.HandlePingMiss,
 		stop:           make(chan bool),
@@ -104,9 +104,7 @@ func (f *ClientFactory) New() (Client, error) {
 		}
 	}
 
-	pingTimer := time.NewTimer(pingPeriod)
-
-	go myPingMissHandler.checkPing(pingTimer, newClient)
+	go myPingMissHandler.checkPing(newClient)
 	go newClient.read()
 
 	return newClient, nil
@@ -116,26 +114,29 @@ func (f *ClientFactory) New() (Client, error) {
 // the implementation of this function needs to be handled by the user of kratos
 type HandlePingMiss func() error
 
-type pingMissHandler struct {
+type pingHandler struct {
 	conn           *websocket.Conn
 	handlePingMiss HandlePingMiss
 	log.Logger
 	stop chan bool
 }
 
-func (pmh *pingMissHandler) stopPingHandler() {
+func (pmh *pingHandler) stopPingHandler() {
 	pmh.stop <- true
 }
 
-func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, inClient *client) {
+func (pmh *pingHandler) checkPing(inClient *client) {
+	pingTimer := time.NewTimer(pingPeriod)
 	pingMiss := false
+
+	defer pingTimer.Stop()
 
 	for !pingMiss {
 		select {
 		case <-pmh.stop:
 			logging.Info(pmh).Log(logging.MessageKey(), "Stopping ping handler!")
 			pingMiss = true
-		case <-inTimer.C:
+		case <-pingTimer.C:
 			pmh.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := inClient.connection.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				logging.Error(pmh).Log(logging.MessageKey(), "Ping miss!")
@@ -145,8 +146,6 @@ func (pmh *pingMissHandler) checkPing(inTimer *time.Timer, inClient *client) {
 				logging.Info(pmh).Log(logging.MessageKey(), "Stopping ping handler!")
 				pingMiss = true
 			default:
-				logging.Info(pmh).Log(logging.MessageKey(), "Resetting timer!")
-				inTimer.Reset(pingPeriod)
 			}
 		}
 	}
@@ -187,7 +186,7 @@ type client struct {
 	handlers        []HandlerRegistry
 	connection      websocketConnection
 	headerInfo      *clientHeader
-	pingHandler     pingMissHandler
+	pingHandler     pingHandler
 	log.Logger
 }
 
