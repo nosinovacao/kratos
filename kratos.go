@@ -141,7 +141,7 @@ func (pmh *pingHandler) checkPing(inClient *client) {
 			return
 		case <-pingTimer.C:
 			pmh.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := inClient.connection.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+			if err :=pmh.conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				return
 			}
 		}
