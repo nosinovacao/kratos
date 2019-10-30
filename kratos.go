@@ -133,7 +133,7 @@ func (pmh *pingHandler) checkPing(inClient *client) {
 		close(pmh.stop)
 	}()
 
-	for  {
+	for {
 		select {
 		case <-pmh.stop:
 			logging.Info(pmh).Log(logging.MessageKey(), "Stopping ping handler!")
@@ -141,7 +141,7 @@ func (pmh *pingHandler) checkPing(inClient *client) {
 			return
 		case <-pingTimer.C:
 			pmh.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err :=pmh.conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+			if err := pmh.conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				return
 			}
 		}
@@ -317,11 +317,16 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 
 		//Get url to which we are redirected and reconfigure it
 		connection, resp, err = dialer.Dial(wsURL, headers)
-		
+
 		if err != nil {
-			return nil, "", err	
+			return nil, "", err
 		}
-		
+
+		if resp == nil {
+			return nil, "", err
+		}
+
+		defer resp.Body.Close()
 	} else {
 		if resp != nil {
 			err = createError(resp, fmt.Errorf("Received invalid response from petasos!"))
