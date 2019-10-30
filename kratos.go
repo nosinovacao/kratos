@@ -317,6 +317,11 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 
 		//Get url to which we are redirected and reconfigure it
 		connection, resp, err = dialer.Dial(wsURL, headers)
+		
+		if err != nil {
+			return nil, "", err	
+		}
+		
 	} else {
 		if resp != nil {
 			err = createError(resp, fmt.Errorf("Received invalid response from petasos!"))
