@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -305,6 +306,10 @@ func createConnection(headerInfo *clientHeader, httpURL string, crtFile string, 
 
 	defer resp.Body.Close()
 
+	if resp.Request.Response == nil {
+		return nil, "", errors.New("Petasos response is nil!")
+	}
+	
 	if resp.StatusCode == http.StatusTemporaryRedirect || resp.Request.Response.StatusCode == http.StatusTemporaryRedirect {
 		var location string
 
